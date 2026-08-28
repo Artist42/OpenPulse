@@ -1,0 +1,21 @@
+name: OpenPulse
+options:
+  bundleIdPrefix: com.artist42
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  OpenPulse:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: OpenPulse
+        UILaunchScreen: {}
+        NSBluetoothAlwaysUsageDescription: "OpenPulse з'єднується з Bangle.js 2 для зчитування метрик здоров'я."
+        UIBackgroundModes: [bluetooth-central]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.artist42.OpenPulse
+        TARGETED_DEVICE_FAMILY: "1"
