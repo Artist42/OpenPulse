@@ -2,25 +2,39 @@ import SwiftUI
 
 @main
 struct OpenPulseApp: App {
+    @StateObject private var ble = BLEManager.shared
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            TabView {
+                TodayView()
+                    .tabItem { Label("Сьогодні", systemImage: "heart.text.square") }
+                LogView()
+                    .tabItem { Label("Журнал", systemImage: "terminal") }
+                SettingsView()
+                    .tabItem { Label("Налаштування", systemImage: "gearshape") }
+            }
+            .environmentObject(ble)
         }
     }
 }
 
-struct ContentView: View {
+struct TodayView: View {
+    @EnvironmentObject var ble: BLEManager
+
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "heart.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(.red)
-            Text("OpenPulse")
-                .font(.largeTitle.bold())
-            Text("Каркас працює. Далі — BLE і синхронізація.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        NavigationStack {
+            VStack(spacing: 12) {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 56)).foregroundStyle(.red)
+                Text(ble.isConnected ? "Годинник підключено" : "Годинник не підключено")
+                    .font(.headline)
+                Text("Дані з'являться тут після Етапу 4 (синхронізація історії).")
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding()
+            .navigationTitle("Сьогодні")
         }
-        .padding()
     }
 }
