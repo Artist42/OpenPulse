@@ -157,7 +157,7 @@ extension BLEManager: CBPeripheralDelegate {
         log("🔗 UART готовий")
     }
 
-    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+       func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard characteristic.uuid == Self.uartTXUUID,
               let data = characteristic.value,
               let text = String(data: data, encoding: .utf8) else { return }
@@ -165,7 +165,14 @@ extension BLEManager: CBPeripheralDelegate {
         while let range = textBuffer.range(of: "\n") {
             let line = String(textBuffer[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
             textBuffer.removeSubrange(..<range.upperBound)
-            if !line.isEmpty { log("← \(line)") }
+            guard !line.isEmpty else { continue }
+            SyncEngine.shared.handleLine(line)
+            if !line.hasPrefix("BWS:{\"t\"") { // окремі записи не спамимо в Журнал
+                log("← \(line)")
+            }
         }
     }
+    
+    }
+
 }
