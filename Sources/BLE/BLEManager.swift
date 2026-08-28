@@ -157,7 +157,7 @@ extension BLEManager: CBPeripheralDelegate {
         log("🔗 UART готовий")
     }
 
-       func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard characteristic.uuid == Self.uartTXUUID,
               let data = characteristic.value,
               let text = String(data: data, encoding: .utf8) else { return }
@@ -172,7 +172,4 @@ extension BLEManager: CBPeripheralDelegate {
             }
         }
     }
-    
-    }
-
 }
