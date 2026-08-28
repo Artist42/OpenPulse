@@ -1,0 +1,44 @@
+name: Build OpenPulse
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build unsigned archive
+        run: |
+          xcodebuild -project OpenPulse.xcodeproj \
+            -scheme OpenPulse \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath build/OpenPulse.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: Package .ipa
+        run: |
+          mkdir Payload
+          cp -r build/OpenPulse.xcarchive/Products/Applications/OpenPulse.app Payload/
+          zip -r OpenPulse.ipa Payload
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest -y || true
+          gh release create latest OpenPulse.ipa -t "OpenPulse (остання збірка)" -n "Автозбірка з GitHub Actions" || \
+          gh release upload latest OpenPulse.ipa --clobber
