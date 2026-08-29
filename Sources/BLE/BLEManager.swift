@@ -172,4 +172,12 @@ extension BLEManager: CBPeripheralDelegate {
             }
         }
     }
+
+    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+        if let error = error {
+            log("❌ Підписка на вхідні дані: \(error.localizedDescription)")
+        } else {
+            log(characteristic.isNotifying ? "📥 Приймання даних увімкнено" : "📥 Приймання даних вимкнено")
+        }
+    }
 }
