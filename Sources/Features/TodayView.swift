@@ -8,6 +8,7 @@ struct TodayView: View {
 
     @State private var todaySamples: [HealthSample] = []
     @State private var lastHR: HeartRatePoint?
+    @State private var lastNight: SleepNight?
 
     var body: some View {
         NavigationStack {
@@ -15,7 +16,10 @@ struct TodayView: View {
                 Section("Зараз") {
                     row("Пульс", lastHR.map { "\(Int($0.value.rounded())) уд/хв" } ?? "—",
                         detail: lastHR.map { $0.date.formatted(date: .omitted, time: .shortened) })
-                    row("Кроки сьогодні", "\(todaySteps)")
+                        row("Кроки сьогодні", "\(todaySteps)")
+                        row("Сон минулої ночі",
+                            lastNight.map { SleepFormat.duration($0.asleepDuration) } ?? "—",
+                            detail: lastNight.map { "глибокий \(SleepFormat.duration($0.deepDuration))" })
                     row("Температура", lastTemperature.map { String(format: "%.1f°", $0) } ?? "—")
                     row("Батарея годинника", lastBattery.map { "\(Int($0))%" } ?? "—")
                 }
@@ -99,5 +103,8 @@ struct TodayView: View {
         let start = Calendar.current.startOfDay(for: Date())
         todaySamples = db.samples(from: start, to: Date().addingTimeInterval(600))
         lastHR = db.latestHeartRate()
+        let sleepFrom = start.addingTimeInterval(-36 * 3600)
+        let sleepSamples = db.samples(from: sleepFrom, to: Date().addingTimeInterval(600))
+        lastNight = SleepIntervalBuilder.nights(from: sleepSamples).last
     }
 }
