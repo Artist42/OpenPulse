@@ -84,12 +84,16 @@ final class BLEManager: NSObject, ObservableObject {
 
     func send(_ text: String) {
         guard let watch, let rx = rxCharacteristic,
-              let data = text.data(using: .utf8) else { return }
+              let data = text.data(using: .utf8) else {
+            log("⚠️ Не можу відправити: канал не готовий")
+            return
+        }
+        let mtu = watch.maximumWriteValueLength(for: .withResponse)
         var offset = 0
         while offset < data.count {
-            let chunk = data.subdata(in: offset..<min(offset + 20, data.count))
-            watch.writeValue(chunk, for: rx, type: .withoutResponse)
-            offset += 20
+            let chunk = data.subdata(in: offset..<min(offset + mtu, data.count))
+            watch.writeValue(chunk, for: rx, type: .withResponse)
+            offset += mtu
         }
         log("→ \(text.trimmingCharacters(in: .newlines))")
     }
@@ -178,6 +182,13 @@ extension BLEManager: CBPeripheralDelegate {
             log("❌ Підписка на вхідні дані: \(error.localizedDescription)")
         } else {
             log(characteristic.isNotifying ? "📥 Приймання даних увімкнено" : "📥 Приймання даних вимкнено")
+        }
+    }
+        func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        if let error = error {
+            log("❌ Доставка команди: \(error.localizedDescription)")
+        } else {
+            log("✓ Команду доставлено")
         }
     }
 }
