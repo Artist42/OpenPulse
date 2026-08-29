@@ -9,6 +9,8 @@ struct OpenPulseApp: App {
             TabView {
                 TodayView()
                     .tabItem { Label("Сьогодні", systemImage: "heart.text.square") }
+                SleepView()
+                    .tabItem { Label("Сон", systemImage: "moon.zzz.fill") }
                 HeartRateView()
                     .tabItem { Label("Пульс", systemImage: "heart.fill") }
                 ActivityView()
