@@ -173,7 +173,7 @@ extension BLEManager: CBPeripheralDelegate {
         }
         let text = String(decoding: data, as: UTF8.self)
         log("📦 «\(text.replacingOccurrences(of: "\r", with: "␍").replacingOccurrences(of: "\n", with: "⏎"))»")
-        textBuffer += text
+        textBuffer = (textBuffer + text).replacingOccurrences(of: "\r", with: "\n")
         while let range = textBuffer.range(of: "\n") {
             let line = String(textBuffer[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
             textBuffer.removeSubrange(..<range.upperBound)
