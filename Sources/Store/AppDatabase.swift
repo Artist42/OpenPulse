@@ -13,6 +13,19 @@ struct HealthSample: Codable, FetchableRecord, PersistableRecord {
     var activity: String?
 }
 
+// Спільні типи для графіків
+struct HeartRatePoint: Identifiable {
+    let date: Date
+    let value: Double
+    var id: Date { date }
+}
+
+struct DayValue: Identifiable {
+    let date: Date
+    let value: Double
+    var id: Date { date }
+}
+
 final class AppDatabase: ObservableObject {
     static let shared = AppDatabase()
     let dbQueue: DatabaseQueue
@@ -54,5 +67,28 @@ final class AppDatabase: ObservableObject {
         }) ?? (0, nil)
         sampleCount = stats.0
         lastSampleDate = stats.1.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+    }
+
+    // MARK: - Запити для екранів
+
+    func samples(from: Date, to: Date) -> [HealthSample] {
+        (try? dbQueue.read { db in
+            try HealthSample.fetchAll(
+                db,
+                sql: "SELECT * FROM samples WHERE ts >= ? AND ts < ? ORDER BY ts",
+                arguments: [Int(from.timeIntervalSince1970), Int(to.timeIntervalSince1970)]
+            )
+        }) ?? []
+    }
+
+    func latestHeartRate() -> HeartRatePoint? {
+        let result = try? dbQueue.read { db -> (Int, Double)? in
+            if let row = try Row.fetchOne(db, sql: "SELECT ts, hr FROM samples WHERE hr IS NOT NULL ORDER BY ts DESC LIMIT 1") {
+                return (row["ts"], row["hr"])
+            }
+            return nil
+        }
+        guard let r = result ?? nil else { return nil }
+        return HeartRatePoint(date: Date(timeIntervalSince1970: TimeInterval(r.0)), value: r.1)
     }
 }
