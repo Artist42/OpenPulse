@@ -162,6 +162,8 @@ extension BLEManager: CBPeripheralDelegate {
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        if let error = error { log("❌ Помилка прийому: \(error.localizedDescription)") }
+        log("📦 Прийнято \(characteristic.value?.count ?? 0) байт")
         guard characteristic.uuid == Self.uartTXUUID,
               let data = characteristic.value,
               let text = String(data: data, encoding: .utf8) else { return }
