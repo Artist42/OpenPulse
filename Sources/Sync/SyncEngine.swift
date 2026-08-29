@@ -7,6 +7,7 @@ final class SyncEngine: ObservableObject {
     @Published var isSyncing = false
 
     private var pending: [HealthSample] = []
+    private var watchdog: Timer?
 
     private var lastSync: Int {
         get { UserDefaults.standard.integer(forKey: "lastSync") }
@@ -22,9 +23,20 @@ final class SyncEngine: ObservableObject {
         pending = []
         statusText = "Запит історії з годинника…"
         BLEManager.shared.send("\u{10}bwsync.start(\(lastSync));\n")
+        armWatchdog(seconds: 15)
     }
 
     func resetCursor() { lastSync = 0 }
+
+    private func armWatchdog(seconds: TimeInterval) {
+        watchdog?.invalidate()
+        watchdog = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
+            guard let self = self, self.isSyncing else { return }
+            self.flush()
+            self.isSyncing = false
+            self.statusText = "Годинник не відповідає. Перевірте bwsync.boot.js і спробуйте ще раз"
+        }
+    }
 
     func handleLine(_ line: String) {
         guard line.hasPrefix("BWS:") else { return }
@@ -32,9 +44,22 @@ final class SyncEngine: ObservableObject {
         guard let data = json.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
 
+        if obj["ack"] != nil {
+            statusText = "Годинник читає історію…"
+            armWatchdog(seconds: 120)
+            return
+        }
+
+        if let p = obj["prog"] as? Int {
+            statusText = "Годинник переглянув \(p) записів…"
+            armWatchdog(seconds: 120)
+            return
+        }
+
         if let err = obj["err"] as? String {
+            watchdog?.invalidate()
             isSyncing = false
-            statusText = "Помилка годинника: \(err)"
+            statusText = err == "busy" ? "Годинник ще зайнятий, зачекайте хвилину" : "Помилка годинника: \(err)"
             return
         }
 
@@ -43,7 +68,9 @@ final class SyncEngine: ObservableObject {
             if (obj["more"] as? Int) == 1 {
                 statusText = "Партію отримано, запитую наступну…"
                 BLEManager.shared.send("\u{10}bwsync.start(\(lastSync));\n")
+                armWatchdog(seconds: 15)
             } else {
+                watchdog?.invalidate()
                 isSyncing = false
                 statusText = "Готово. У базі \(AppDatabase.shared.sampleCount) записів"
                 BLEManager.shared.log("✅ Синхронізацію завершено")
@@ -52,6 +79,7 @@ final class SyncEngine: ObservableObject {
         }
 
         guard let t = obj["t"] as? Int else { return }
+        armWatchdog(seconds: 30)
         pending.append(HealthSample(
             ts: t,
             hr: (obj["hr"] as? Double).flatMap { $0 > 0 ? $0 : nil },
