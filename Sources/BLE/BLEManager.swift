@@ -163,19 +163,23 @@ extension BLEManager: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         if let error = error { log("❌ Помилка прийому: \(error.localizedDescription)") }
-        log("📦 Прийнято \(characteristic.value?.count ?? 0) байт")
-        guard characteristic.uuid == Self.uartTXUUID,
-              let data = characteristic.value,
-              let text = String(data: data, encoding: .utf8) else { return }
+        guard characteristic.uuid == Self.uartTXUUID else {
+            log("📦 Пакет з чужого каналу: \(characteristic.uuid)")
+            return
+        }
+        guard let data = characteristic.value else {
+            log("📦 Порожній пакет")
+            return
+        }
+        let text = String(decoding: data, as: UTF8.self)
+        log("📦 «\(text.replacingOccurrences(of: "\r", with: "␍").replacingOccurrences(of: "\n", with: "⏎"))»")
         textBuffer += text
         while let range = textBuffer.range(of: "\n") {
             let line = String(textBuffer[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
             textBuffer.removeSubrange(..<range.upperBound)
             guard !line.isEmpty else { continue }
+            log("← \(line)")
             SyncEngine.shared.handleLine(line)
-            if !line.hasPrefix("BWS:{\"t\"") { // окремі записи не спамимо в Журнал
-                log("← \(line)")
-            }
         }
     }
 
