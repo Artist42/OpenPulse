@@ -31,20 +31,8 @@ struct TodayView: View {
                 }
 
                 Section("Пульс сьогодні") {
-                    if hrPoints.isEmpty {
-                        Text("Ще немає даних за сьогодні").foregroundStyle(.secondary)
-                    } else {
-                        Chart(hrPoints) { p in
-                            LineMark(
-                                x: .value("Час", p.date),
-                                y: .value("Пульс", p.value)
-                            )
-                            .foregroundStyle(.red)
-                        }
-                        .chartYScale(domain: .automatic(includesZero: false))
-                        .frame(height: 160)
-                        .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
-                    }
+                    row("Мін · середній · макс", hrStatsText)
+                    row("У спокої (орієнтовно)", restingTodayText)
                 }
 
 
@@ -58,11 +46,20 @@ struct TodayView: View {
     private var todaySteps: Int { todaySamples.compactMap(\.steps).reduce(0, +) }
     private var lastTemperature: Double? { todaySamples.compactMap(\.temperature).last }
     private var lastBattery: Double? { todaySamples.compactMap(\.battery).last }
-    private var hrPoints: [HeartRatePoint] {
-        todaySamples.compactMap { s in
-            guard let hr = s.hr else { return nil }
-            return HeartRatePoint(date: Date(timeIntervalSince1970: TimeInterval(s.ts)), value: hr)
-        }
+    private var todayHRs: [Double] { todaySamples.compactMap(\.validHR) }
+
+    private var hrStatsText: String {
+        guard let mn = todayHRs.min(), let mx = todayHRs.max() else { return "—" }
+        let avg = todayHRs.reduce(0, +) / Double(todayHRs.count)
+        return "\(Int(mn.rounded())) · \(Int(avg.rounded())) · \(Int(mx.rounded())) уд/хв"
+    }
+
+    private var restingTodayText: String {
+        guard !todayHRs.isEmpty else { return "—" }
+        let sorted = todayHRs.sorted()
+        let k = max(1, sorted.count / 10)
+        let rest = sorted.prefix(k).reduce(0, +) / Double(k)
+        return "\(Int(rest.rounded())) уд/хв"
     }
 
     private func row(_ title: String, _ value: String, detail: String? = nil) -> some View {
