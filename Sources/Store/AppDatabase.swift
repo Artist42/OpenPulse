@@ -69,6 +69,13 @@ final class AppDatabase: ObservableObject {
         lastSampleDate = stats.1.map { Date(timeIntervalSince1970: TimeInterval($0)) }
     }
 
+    func wipeAll() {
+        try? dbQueue.write { db in
+            try db.execute(sql: "DELETE FROM samples")
+        }
+        refreshStats()
+    }
+    
     // MARK: - Запити для екранів
 
     func samples(from: Date, to: Date) -> [HealthSample] {
