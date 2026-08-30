@@ -72,6 +72,7 @@ struct TodayView: View {
                     .disabled(sync.isSyncing || !ble.isConnected)
 
                     Button("Повний ресинк (з нуля)", role: .destructive) {
+                        db.wipeAll()
                         sync.resetCursor()
                         sync.startSync()
                     }
