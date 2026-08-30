@@ -46,10 +46,10 @@ enum SleepIntervalBuilder {
     static let defaultSlot: TimeInterval = 3 * 60
 
     // --- Пороги класифікації (див. таблицю калібрування в інструкції) ---
-    static let hrOffset: Double = 10        // «сонний» пульс ≤ пульс у спокої + 10 уд/хв
-    static let deepHrOffset: Double = 3     // «глибокий» пульс ≤ пульс у спокої + 3
+    static let hrOffset: Double = 14        // «сонний» пульс ≤ пульс у спокої + 10 уд/хв
+    static let deepHrOffset: Double = 6     // «глибокий» пульс ≤ пульс у спокої + 3
     static let moveHeadroom = 1.5           // запас над «тихим» рухом (30-й перцентиль)
-    static let deepMoveFactor = 0.4         // глибокий: рух ≤ 40% порогу
+    static let deepMoveFactor = 0.6         // глибокий: рух ≤ 40% порогу
     static let entryMinutes: Double = 21    // стільки хвилин тиші поспіль = засинання
     static let mergeGapFactor = 1.8         // мікророзриви ≤ 1.8 кроку зшиваємо
     static let maxAwakeGap: TimeInterval = 60 * 60 // розрив ≤ 60 хв = «пробудження»
