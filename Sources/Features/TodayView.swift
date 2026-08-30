@@ -9,6 +9,7 @@ struct TodayView: View {
     @State private var todaySamples: [HealthSample] = []
     @State private var lastHR: HeartRatePoint?
     @State private var lastNight: SleepNight?
+    @State private var tempSummary = TemperatureAnalyzer.Summary(baseline: nil, nights: [])
 
     var body: some View {
         NavigationStack {
@@ -21,6 +22,7 @@ struct TodayView: View {
                             lastNight.map { SleepFormat.duration($0.asleepDuration) } ?? "—",
                             detail: lastNight.map { "глибокий \(SleepFormat.duration($0.deepDuration))" })
                     row("Температура", lastTemperature.map { String(format: "%.1f°", $0) } ?? "—")
+                        detail: tempSummary.lastDeviation.map { String(format: "%+.2f° до базової", $0) })
                     row("Батарея годинника", lastBattery.map { "\(Int($0))%" } ?? "—")
                 }
 
@@ -106,5 +108,8 @@ struct TodayView: View {
         let sleepFrom = start.addingTimeInterval(-36 * 3600)
         let sleepSamples = db.samples(from: sleepFrom, to: Date().addingTimeInterval(600))
         lastNight = SleepIntervalBuilder.nights(from: sleepSamples).last
+        let monthFrom = start.addingTimeInterval(-32 * 86400)
+        let monthSamples = db.samples(from: monthFrom, to: Date().addingTimeInterval(600))
+        tempSummary = TemperatureAnalyzer.summary(samples: monthSamples, nights: SleepIntervalBuilder.nights(from: monthSamples))
     }
 }
