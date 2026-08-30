@@ -11,10 +11,12 @@ struct TodayView: View {
     @State private var lastNight: SleepNight?
     @State private var tempSummary = TemperatureAnalyzer.Summary(baseline: nil, nights: [])
     @State private var todayNaps: [SleepNap] = []
+    @State private var readiness: ReadinessResult?
 
     var body: some View {
         NavigationStack {
             List {
+                readinessSection
                 Section("Зараз") {
                     row("Пульс", lastHR.map { "\(Int($0.value.rounded())) уд/хв" } ?? "—",
                         detail: lastHR.map { $0.date.formatted(date: .omitted, time: .shortened) })
@@ -62,6 +64,52 @@ struct TodayView: View {
         return "\(Int(rest.rounded())) уд/хв"
     }
 
+    private var readinessSection: some View {
+        Section("Готовність") {
+            if let r = readiness {
+                HStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.gray.opacity(0.25), lineWidth: 8)
+                        Circle()
+                            .trim(from: 0, to: CGFloat(r.score) / 100)
+                            .stroke(r.zoneColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                        Text("\(r.score)").font(.title3).bold()
+                    }
+                    .frame(width: 64, height: 64)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(r.zoneName).font(.headline)
+                        Text(r.advice).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+
+                DisclosureGroup("Складові") {
+                    ForEach(r.components) { c in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(c.name)
+                                Spacer()
+                                Text("\(Int(c.points.rounded())) з \(Int(c.maxPoints))").bold()
+                            }
+                            ProgressView(value: c.fraction)
+                                .tint(c.fraction >= 0.75 ? .green : (c.fraction >= 0.45 ? .orange : .red))
+                            Text(c.detail).font(.caption).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            } else {
+                Text("Ще недостатньо даних: потрібна хоча б одна розпізнана ніч сну за останні 36 годин.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    
     private func row(_ title: String, _ value: String, detail: String? = nil) -> some View {
         HStack {
             Text(title)
@@ -85,5 +133,6 @@ struct TodayView: View {
         lastNight = sleepResult.nights.last
         todayNaps = sleepResult.naps.filter { $0.start >= start }
         tempSummary = TemperatureAnalyzer.summary(samples: monthSamples, nights: sleepResult.nights)
+        readiness = ReadinessCalculator.calculate(samples: monthSamples, nights: sleepResult.nights)
     }
 }
