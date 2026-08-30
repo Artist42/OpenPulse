@@ -13,6 +13,14 @@ struct HealthSample: Codable, FetchableRecord, PersistableRecord {
     var activity: String?
 }
 
+extension HealthSample {
+    // Пульс, якому можна довіряти: годинник на руці і значення не артефакт (< 45).
+    var validHR: Double? {
+        guard activity != "NOT_WORN", let hr, hr >= 45 else { return nil }
+        return hr
+    }
+}
+
 // Спільні типи для графіків
 struct HeartRatePoint: Identifiable {
     let date: Date
@@ -90,7 +98,7 @@ final class AppDatabase: ObservableObject {
 
     func latestHeartRate() -> HeartRatePoint? {
         let result = try? dbQueue.read { db -> (Int, Double)? in
-            if let row = try Row.fetchOne(db, sql: "SELECT ts, hr FROM samples WHERE hr IS NOT NULL ORDER BY ts DESC LIMIT 1") {
+            if let row = try Row.fetchOne(db, sql: "SELECT ts, hr FROM samples WHERE hr >= 45 AND (activity IS NULL OR activity <> 'NOT_WORN') ORDER BY ts DESC LIMIT 1") {                
                 return (row["ts"], row["hr"])
             }
             return nil
