@@ -21,7 +21,7 @@ struct TodayView: View {
                         row("Сон минулої ночі",
                             lastNight.map { SleepFormat.duration($0.asleepDuration) } ?? "—",
                             detail: lastNight.map { "глибокий \(SleepFormat.duration($0.deepDuration))" })
-                    row("Температура", lastTemperature.map { String(format: "%.1f°", $0) } ?? "—")
+                    row("Температура", lastTemperature.map { String(format: "%.1f°", $0) } ?? "—",
                         detail: tempSummary.lastDeviation.map { String(format: "%+.2f° до базової", $0) })
                     row("Батарея годинника", lastBattery.map { "\(Int($0))%" } ?? "—")
                 }
