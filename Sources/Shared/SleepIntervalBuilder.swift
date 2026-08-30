@@ -26,6 +26,14 @@ struct SleepNight: Identifiable {
     var awakeningsCount: Int { segments.filter { $0.phase == .awake }.count }
 }
 
+// Денна дрімота: окрема коротка сесія сну поза головною ніччю.
+struct SleepNap: Identifiable {
+    let start: Date
+    let end: Date
+    let duration: TimeInterval  // чистий сон, без пробуджень
+    var id: Date { start }
+}
+
 enum SleepFormat {
     static func duration(_ t: TimeInterval) -> String {
         let m = Int((t / 60).rounded())
@@ -36,24 +44,27 @@ enum SleepFormat {
     }
 }
 
-// Класифікатор сну v2: мітки активності годинника ІГНОРУЮТЬСЯ (крім NOT_WORN).
-// Сон визначається як у Fitbit — комбінацією руху та пульсу відносно
-// особистої базової лінії. Усі пороги зібрані нижче для калібрування.
+// Класифікатор сну v2.2: мітки активності годинника ІГНОРУЮТЬСЯ (крім NOT_WORN).
+// Сон визначається рухом + пульсом відносно особистої базової лінії.
+// Ніч закінчується першим справжнім підйомом (кроки в розриві), а окремі
+// сесії протягом дня повертаються як дрімота (naps). Пороги — для калібрування.
 enum SleepIntervalBuilder {
     // --- Крок запису (виводиться з даних, не хардкодиться) ---
     static let minSlot: TimeInterval = 60
     static let maxSlot: TimeInterval = 15 * 60
     static let defaultSlot: TimeInterval = 3 * 60
 
-    // --- Пороги класифікації (див. таблицю калібрування в інструкції) ---
-    static let hrOffset: Double = 14        // «сонний» пульс ≤ пульс у спокої + 10 уд/хв
-    static let deepHrOffset: Double = 6     // «глибокий» пульс ≤ пульс у спокої + 3
+    // --- Пороги класифікації (див. таблиці калібрування в інструкціях) ---
+    static let hrOffset: Double = 14        // «сонний» пульс ≤ пульс у спокої + 14 уд/хв
+    static let deepHrOffset: Double = 6     // «глибокий» пульс ≤ пульс у спокої + 6
     static let moveHeadroom = 1.5           // запас над «тихим» рухом (30-й перцентиль)
-    static let deepMoveFactor = 0.6         // глибокий: рух ≤ 40% порогу
+    static let deepMoveFactor = 0.6         // глибокий: рух ≤ 60% порогу
     static let entryMinutes: Double = 21    // стільки хвилин тиші поспіль = засинання
     static let mergeGapFactor = 1.8         // мікророзриви ≤ 1.8 кроку зшиваємо
-    static let maxAwakeGap: TimeInterval = 60 * 60 // розрив ≤ 60 хв = «пробудження»
+    static let maxAwakeGap: TimeInterval = 60 * 60 // тихий розрив ≤ 60 хв = «пробудження»
     static let minSession: TimeInterval = 40 * 60  // коротші сесії — не нічний сон
+    static let wakeSteps = 60               // стільки кроків у розриві = справжній підйом
+    static let minNap: TimeInterval = 20 * 60      // коротші сесії дрімотою не вважаємо
 
     private struct SlotInfo {
         let start: Date
@@ -65,8 +76,16 @@ enum SleepIntervalBuilder {
     }
 
     static func nights(from samples: [HealthSample], calendar: Calendar = .current) -> [SleepNight] {
+        analyze(from: samples, calendar: calendar).nights
+    }
+
+    static func naps(from samples: [HealthSample], calendar: Calendar = .current) -> [SleepNap] {
+        analyze(from: samples, calendar: calendar).naps
+    }
+
+    static func analyze(from samples: [HealthSample], calendar: Calendar = .current) -> (nights: [SleepNight], naps: [SleepNap]) {
         let sorted = samples.sorted { $0.ts < $1.ts }
-        guard sorted.count > 5 else { return [] }
+        guard sorted.count > 5 else { return ([], []) }
 
         // 1. Типовий крок запису — медіана відстаней між сусідніми записами.
         var deltas: [TimeInterval] = []
@@ -121,8 +140,7 @@ enum SleepIntervalBuilder {
             smooth[i] = yes * 2 > hi - lo + 1
         }
 
-        // 7. Засинання лише після entryMinutes тиші поспіль —
-        //    вечір на дивані більше не вважається сном.
+        // 7. Засинання лише після entryMinutes тиші поспіль.
         let entrySlots = max(2, Int((entryMinutes * 60 / typical).rounded()))
         var asleep = [Bool](repeating: false, count: slots.count)
         var i = 0
@@ -173,15 +191,19 @@ enum SleepIntervalBuilder {
         if let cs = currentStart, let ce = currentEnd {
             segments.append(SleepSegment(start: cs, end: ce, phase: currentPhase))
         }
-        guard !segments.isEmpty else { return [] }
+        guard !segments.isEmpty else { return ([], []) }
 
-        // 10. Групування в сесії: розрив ≤ 60 хв стає сегментом «Пробудження».
+        // 10. Групування в сесії: тихий розрив ≤ 60 хв = «пробудження»;
+        //     кроки в розриві (≥ wakeSteps) = справжній підйом → нова сесія.
+        func stepsBetween(_ from: Date, _ to: Date) -> Int {
+            slots.filter { $0.end > from && $0.start < to }.reduce(0) { $0 + $1.steps }
+        }
         var sessions: [[SleepSegment]] = []
         var current: [SleepSegment] = []
         for seg in segments {
             if let last = current.last {
                 let gap = seg.start.timeIntervalSince(last.end)
-                if gap > maxAwakeGap {
+                if gap > maxAwakeGap || stepsBetween(last.end, seg.start) >= wakeSteps {
                     sessions.append(current)
                     current = [seg]
                     continue
@@ -194,17 +216,34 @@ enum SleepIntervalBuilder {
         }
         if !current.isEmpty { sessions.append(current) }
 
-        // 11. Головна сесія кожної ночі — найдовша; дрімота поки ігнорується.
-        var byNight: [Date: [SleepSegment]] = [:]
-        for session in sessions {
-            let asleepTotal = session.filter { $0.phase != .awake }.reduce(0.0) { $0 + $1.duration }
-            guard asleepTotal >= minSession, let end = session.last?.end else { continue }
-            let night = calendar.startOfDay(for: end)
-            let existing = byNight[night]?.filter { $0.phase != .awake }.reduce(0.0) { $0 + $1.duration } ?? 0
-            if asleepTotal > existing { byNight[night] = session }
+        // 11. Ніч = найдовша сесія з чистим сном ≥ minSession за день прокидання.
+        func asleepTotal(_ s: [SleepSegment]) -> TimeInterval {
+            s.filter { $0.phase != .awake }.reduce(0.0) { $0 + $1.duration }
         }
-        return byNight
-            .map { SleepNight(wakeDate: $0.key, segments: $0.value) }
+        var byNight: [Date: Int] = [:] // день прокидання → індекс сесії
+        for (idx, session) in sessions.enumerated() {
+            guard asleepTotal(session) >= minSession, let end = session.last?.end else { continue }
+            let night = calendar.startOfDay(for: end)
+            if let prev = byNight[night], asleepTotal(sessions[prev]) >= asleepTotal(session) { continue }
+            byNight[night] = idx
+        }
+        let nightIndexes = Set(byNight.values)
+        let nights = byNight
+            .map { SleepNight(wakeDate: $0.key, segments: sessions[$0.value]) }
             .sorted { $0.wakeDate < $1.wakeDate }
+
+        // 12. Дрімота: всі інші сесії з чистим сном ≥ minNap.
+        let naps: [SleepNap] = sessions.indices.compactMap { idx in
+            guard !nightIndexes.contains(idx) else { return nil }
+            let session = sessions[idx]
+            let total = asleepTotal(session)
+            guard total >= minNap,
+                  let start = session.first?.start,
+                  let end = session.last?.end else { return nil }
+            return SleepNap(start: start, end: end, duration: total)
+        }
+        .sorted { $0.start < $1.start }
+
+        return (nights, naps)
     }
 }
