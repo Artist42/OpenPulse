@@ -44,10 +44,12 @@ enum SleepFormat {
     }
 }
 
-// Класифікатор сну v2.2: мітки активності годинника ІГНОРУЮТЬСЯ (крім NOT_WORN).
+// Класифікатор сну v2.3: мітки активності годинника ІГНОРУЮТЬСЯ (крім NOT_WORN).
+// Пульс береться лише довірений (validHR: на руці і ≥ 45 уд/хв).
 // Сон визначається рухом + пульсом відносно особистої базової лінії.
-// Ніч закінчується першим справжнім підйомом (кроки в розриві), а окремі
-// сесії протягом дня повертаються як дрімота (naps). Пороги — для калібрування.
+// Ніч закінчується першим справжнім підйомом (кроки в розриві), окремі
+// сесії протягом дня повертаються як дрімота (naps) — але лише якщо в
+// достатній частці слотів був пульс (знятий годинник ≠ сон).
 enum SleepIntervalBuilder {
     // --- Крок запису (виводиться з даних, не хардкодиться) ---
     static let minSlot: TimeInterval = 60
@@ -65,6 +67,7 @@ enum SleepIntervalBuilder {
     static let minSession: TimeInterval = 40 * 60  // коротші сесії — не нічний сон
     static let wakeSteps = 60               // стільки кроків у розриві = справжній підйом
     static let minNap: TimeInterval = 20 * 60      // коротші сесії дрімотою не вважаємо
+    static let napHrCoverage = 0.5          // мін. частка слотів із пульсом, щоб вірити дрімоті
 
     private struct SlotInfo {
         let start: Date
@@ -95,7 +98,7 @@ enum SleepIntervalBuilder {
         }
         let typical = deltas.isEmpty ? defaultSlot : deltas.sorted()[deltas.count / 2]
 
-        // 2. Слоти з СИРИХ даних: рух за хвилину, пульс, кроки.
+        // 2. Слоти з СИРИХ даних: рух за хвилину, довірений пульс, кроки.
         var slots: [SlotInfo] = []
         for (i, s) in sorted.enumerated() {
             var slot = typical
@@ -108,14 +111,14 @@ enum SleepIntervalBuilder {
                 start: end.addingTimeInterval(-slot),
                 end: end,
                 movementPerMin: Double(s.movement ?? 0) / (slot / 60),
-                hr: s.hr,
+                hr: s.validHR,
                 steps: s.steps ?? 0,
                 worn: s.activity != "NOT_WORN"
             ))
         }
 
         // 3. Особиста базова лінія: пульс у спокої = середнє найнижчих 10% замірів.
-        let hrs = slots.compactMap { $0.hr }.filter { $0 > 30 }.sorted()
+        let hrs = slots.compactMap { $0.hr }.sorted()
         let k = max(1, hrs.count / 10)
         let restingHR: Double? = hrs.isEmpty ? nil : hrs.prefix(k).reduce(0, +) / Double(k)
 
@@ -127,8 +130,8 @@ enum SleepIntervalBuilder {
         // 5. Кандидат сну: годинник на руці, нуль кроків, тихий рух І сонний пульс.
         let candidate: [Bool] = slots.map { s in
             guard s.worn, s.steps == 0, s.movementPerMin <= moveThreshold else { return false }
-            if let hr = s.hr, hr > 30, let rest = restingHR { return hr <= rest + hrOffset }
-            return true // якщо пульсу в слоті немає — вирішує рух
+            if let hr = s.hr, let rest = restingHR { return hr <= rest + hrOffset }
+            return true // якщо довіреного пульсу в слоті немає — вирішує рух
         }
 
         // 6. Згладжування «більшістю» у вікні з 5 слотів (прибирає поодинокі викиди).
@@ -161,7 +164,7 @@ enum SleepIntervalBuilder {
         func phaseOf(_ s: SlotInfo) -> SleepPhase {
             let calmMove = s.movementPerMin <= moveThreshold * deepMoveFactor
             let calmHR: Bool
-            if let hr = s.hr, hr > 30, let rest = restingHR {
+            if let hr = s.hr, let rest = restingHR {
                 calmHR = hr <= rest + deepHrOffset
             } else {
                 calmHR = calmMove
@@ -232,7 +235,9 @@ enum SleepIntervalBuilder {
             .map { SleepNight(wakeDate: $0.key, segments: sessions[$0.value]) }
             .sorted { $0.wakeDate < $1.wakeDate }
 
-        // 12. Дрімота: всі інші сесії з чистим сном ≥ minNap.
+        // 12. Дрімота: всі інші сесії з чистим сном ≥ minNap — але лише якщо
+        //     в достатній частці слотів був довірений пульс. Знятий годинник
+        //     (нуль руху, немає контакту) більше не виглядає як денний сон.
         let naps: [SleepNap] = sessions.indices.compactMap { idx in
             guard !nightIndexes.contains(idx) else { return nil }
             let session = sessions[idx]
@@ -240,6 +245,10 @@ enum SleepIntervalBuilder {
             guard total >= minNap,
                   let start = session.first?.start,
                   let end = session.last?.end else { return nil }
+            let inSession = slots.filter { $0.end > start && $0.start < end }
+            let withHR = inSession.filter { $0.hr != nil }.count
+            guard !inSession.isEmpty,
+                  Double(withHR) / Double(inSession.count) >= napHrCoverage else { return nil }
             return SleepNap(start: start, end: end, duration: total)
         }
         .sorted { $0.start < $1.start }
