@@ -15,7 +15,7 @@ struct ActivityView: View {
         case h6 = "6 год"
         case day = "Доба"
         var id: String { rawValue }
-        var seconds: Int {
+        var seconds: Double {
             switch self {
             case .h1: return 3600
             case .h3: return 3 * 3600
@@ -42,6 +42,12 @@ struct ActivityView: View {
     @State private var detailWindow: DetailWindow = .h3
     @State private var selectedTime: Date?
 
+    // Видимі вікна графіків (керуються пінчем — два пальці)
+    @State private var detailVisible: Double = 3 * 3600
+    @State private var todayVisible: Double = 24 * 3600
+    @State private var dailyVisible: Double = 7 * 86400
+    @State private var moveVisible: Double = 7 * 86400
+
     var body: some View {
         NavigationStack {
             List {
@@ -54,6 +60,7 @@ struct ActivityView: View {
             .onAppear { reload() }
             .onChange(of: period) { _, _ in reload() }
             .onChange(of: detailDay) { _, _ in reloadDetail() }
+            .onChange(of: detailWindow) { _, _ in detailVisible = detailWindow.seconds }
             .onChange(of: db.sampleCount) { _, _ in reload() }
         }
     }
@@ -89,8 +96,7 @@ struct ActivityView: View {
                     )
                     .foregroundStyle(.green)
                 }
-                .chartScrollableAxes(.horizontal)
-                .chartXVisibleDomain(length: detailWindow.seconds)
+                .zoomableChart(visibleSeconds: $detailVisible, minSeconds: 900, maxSeconds: 24 * 3600)
                 .chartXSelection(value: $selectedTime)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 5)) { _ in
@@ -117,8 +123,7 @@ struct ActivityView: View {
                     )
                     .foregroundStyle(.orange)
                 }
-                .chartScrollableAxes(.horizontal)
-                .chartXVisibleDomain(length: detailWindow.seconds)
+                .zoomableChart(visibleSeconds: $detailVisible, minSeconds: 900, maxSeconds: 24 * 3600)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                         AxisGridLine()
@@ -164,6 +169,7 @@ struct ActivityView: View {
                     )
                     .foregroundStyle(.green)
                 }
+                .zoomableChart(visibleSeconds: $todayVisible, minSeconds: 2 * 3600, maxSeconds: 24 * 3600)
                 .frame(height: 150)
                 .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
             }
@@ -194,6 +200,7 @@ struct ActivityView: View {
                     )
                     .foregroundStyle(.green)
                 }
+                .zoomableChart(visibleSeconds: $dailyVisible, minSeconds: 3 * 86400, maxSeconds: Double(period.days) * 86400)
                 .frame(height: 180)
                 .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
             }
@@ -224,6 +231,7 @@ struct ActivityView: View {
                     )
                     .foregroundStyle(.orange)
                 }
+                .zoomableChart(visibleSeconds: $moveVisible, minSeconds: 3 * 86400, maxSeconds: Double(period.days) * 86400)
                 .frame(height: 140)
                 .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
             }
@@ -272,6 +280,8 @@ struct ActivityView: View {
         let now = Date().addingTimeInterval(600)
         todaySamples = db.samples(from: Calendar.current.startOfDay(for: Date()), to: now)
         periodSamples = db.samples(from: Calendar.current.startOfDay(for: Date().addingTimeInterval(TimeInterval(-(period.days - 1) * 86400))), to: now)
+        dailyVisible = Double(period.days) * 86400
+        moveVisible = Double(period.days) * 86400
         reloadDetail()
     }
 
