@@ -10,6 +10,7 @@ struct TodayView: View {
     @State private var lastHR: HeartRatePoint?
     @State private var lastNight: SleepNight?
     @State private var tempSummary = TemperatureAnalyzer.Summary(baseline: nil, nights: [])
+    @State private var todayNaps: [SleepNap] = []
 
     var body: some View {
         NavigationStack {
@@ -21,6 +22,9 @@ struct TodayView: View {
                         row("Сон минулої ночі",
                             lastNight.map { SleepFormat.duration($0.asleepDuration) } ?? "—",
                             detail: lastNight.map { "глибокий \(SleepFormat.duration($0.deepDuration))" })
+                        row("Дрімота сьогодні",
+                            todayNaps.isEmpty ? "—" : SleepFormat.duration(todayNaps.reduce(0) { $0 + $1.duration }),
+                            detail: todayNaps.isEmpty ? nil : "епізодів: \(todayNaps.count)")
                     row("Температура", lastTemperature.map { String(format: "%.1f°", $0) } ?? "—",
                         detail: tempSummary.lastDeviation.map { String(format: "%+.2f° до базової", $0) })
                     row("Батарея годинника", lastBattery.map { "\(Int($0))%" } ?? "—")
@@ -109,8 +113,9 @@ struct TodayView: View {
         let sleepSamples = db.samples(from: sleepFrom, to: Date().addingTimeInterval(600))
         let monthFrom = start.addingTimeInterval(-32 * 86400)
         let monthSamples = db.samples(from: monthFrom, to: Date().addingTimeInterval(600))
-        let monthNights = SleepIntervalBuilder.nights(from: monthSamples)
-        lastNight = monthNights.last
-        tempSummary = TemperatureAnalyzer.summary(samples: monthSamples, nights: monthNights)
+        let sleepResult = SleepIntervalBuilder.analyze(from: monthSamples)
+        lastNight = sleepResult.nights.last
+        todayNaps = sleepResult.naps.filter { $0.start >= start }
+        tempSummary = TemperatureAnalyzer.summary(samples: monthSamples, nights: sleepResult.nights)
     }
 }
