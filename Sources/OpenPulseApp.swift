@@ -15,6 +15,10 @@ struct OpenPulseApp: App {
                     .tabItem { Label("Пульс", systemImage: "heart.fill") }
                 ActivityView()
                     .tabItem { Label("Активність", systemImage: "figure.walk") }
+                TemperatureView()
+                    .tabItem { Label("Температура", systemImage: "thermometer.medium") }
+                TrendsView()
+                    .tabItem { Label("Тренди", systemImage: "chart.line.uptrend.xyaxis") }
                 LogView()
                     .tabItem { Label("Журнал", systemImage: "terminal") }
                 SettingsView()
