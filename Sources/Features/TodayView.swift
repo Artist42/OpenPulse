@@ -107,9 +107,10 @@ struct TodayView: View {
         lastHR = db.latestHeartRate()
         let sleepFrom = start.addingTimeInterval(-36 * 3600)
         let sleepSamples = db.samples(from: sleepFrom, to: Date().addingTimeInterval(600))
-        lastNight = SleepIntervalBuilder.nights(from: sleepSamples).last
         let monthFrom = start.addingTimeInterval(-32 * 86400)
         let monthSamples = db.samples(from: monthFrom, to: Date().addingTimeInterval(600))
-        tempSummary = TemperatureAnalyzer.summary(samples: monthSamples, nights: SleepIntervalBuilder.nights(from: monthSamples))
+        let monthNights = SleepIntervalBuilder.nights(from: monthSamples)
+        lastNight = monthNights.last
+        tempSummary = TemperatureAnalyzer.summary(samples: monthSamples, nights: monthNights)
     }
 }
