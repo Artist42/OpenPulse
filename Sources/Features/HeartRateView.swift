@@ -27,6 +27,7 @@ struct HeartRateView: View {
     @ObservedObject var db = AppDatabase.shared
     @State private var period: Period = .day
     @State private var samples: [HealthSample] = []
+    @State private var visibleSeconds: Double = 86400
 
     var body: some View {
         NavigationStack {
@@ -56,6 +57,7 @@ struct HeartRateView: View {
                             .foregroundStyle(.red)
                         }
                         .chartYScale(domain: .automatic(includesZero: false))
+                        .zoomableChart(visibleSeconds: $visibleSeconds, minSeconds: 1800, maxSeconds: Double(period.days) * 86400)
                         .frame(height: 220)
                         .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
                     }
@@ -76,11 +78,11 @@ struct HeartRateView: View {
     }
 
     private var chartPoints: [RangePoint] {
-        let hrSamples = samples.filter { $0.hr != nil }
+        let hrSamples = samples.filter { $0.validHR != nil }
         guard !hrSamples.isEmpty else { return [] }
         if period == .day {
             return hrSamples.map { s in
-                let hr = s.hr ?? 0
+                let hr = s.validHR ?? 0
                 return RangePoint(date: Date(timeIntervalSince1970: TimeInterval(s.ts)), value: hr, minValue: hr, maxValue: hr)
             }
         }
@@ -89,7 +91,7 @@ struct HeartRateView: View {
             floor(Double(s.ts) / bucket) * bucket
         }
         return grouped.map { key, group in
-            let hrs = group.compactMap(\.hr)
+            let hrs = group.compactMap(\.validHR)
             return RangePoint(
                 date: Date(timeIntervalSince1970: key + bucket / 2),
                 value: hrs.reduce(0, +) / Double(hrs.count),
@@ -100,7 +102,7 @@ struct HeartRateView: View {
         .sorted { $0.date < $1.date }
     }
 
-    private var allHRs: [Double] { samples.compactMap(\.hr) }
+    private var allHRs: [Double] { samples.compactMap(\.validHR) }
     private var minHR: Double? { allHRs.min() }
     private var maxHR: Double? { allHRs.max() }
     private var avgHR: Double? { allHRs.isEmpty ? nil : allHRs.reduce(0, +) / Double(allHRs.count) }
@@ -123,5 +125,6 @@ struct HeartRateView: View {
         let to = Date().addingTimeInterval(600)
         let from = Calendar.current.startOfDay(for: Date().addingTimeInterval(TimeInterval(-(period.days - 1) * 86400)))
         samples = db.samples(from: from, to: to)
+        visibleSeconds = Double(period.days) * 86400
     }
 }
