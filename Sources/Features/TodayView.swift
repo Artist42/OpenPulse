@@ -47,37 +47,7 @@ struct TodayView: View {
                     }
                 }
 
-                Section("Годинник") {
-                    HStack {
-                        Circle()
-                            .fill(ble.isConnected ? Color.green : Color.red)
-                            .frame(width: 10, height: 10)
-                        Text(ble.statusText)
-                    }
-                }
 
-                Section("Синхронізація") {
-                    Text(sync.statusText)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Button {
-                        sync.startSync()
-                    } label: {
-                        if sync.isSyncing {
-                            ProgressView()
-                        } else {
-                            Text("Синхронізувати зараз")
-                        }
-                    }
-                    .disabled(sync.isSyncing || !ble.isConnected)
-
-                    Button("Повний ресинк (з нуля)", role: .destructive) {
-                        db.wipeAll()
-                        sync.resetCursor()
-                        sync.startSync()
-                    }
-                    .disabled(sync.isSyncing || !ble.isConnected)
-                }
             }
             .navigationTitle("Сьогодні")
             .onAppear { reload() }
