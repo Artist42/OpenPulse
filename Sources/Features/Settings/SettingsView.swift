@@ -3,6 +3,8 @@ import CoreBluetooth
 
 struct SettingsView: View {
     @EnvironmentObject var ble: BLEManager
+    @ObservedObject var sync = SyncEngine.shared
+    @State private var showWipeConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -28,6 +30,26 @@ struct SettingsView: View {
                         .disabled(!ble.isConnected)
                     Button("Забути годинник", role: .destructive) { ble.forgetWatch() }
                 }
+                Section("Синхронізація") {
+                    Text(sync.statusText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        sync.startSync()
+                    } label: {
+                        if sync.isSyncing {
+                            ProgressView()
+                        } else {
+                            Text("Синхронізувати зараз")
+                        }
+                    }
+                    .disabled(sync.isSyncing || !ble.isConnected)
+
+                    Button("Повний ресинк (стерти базу)", role: .destructive) {
+                        showWipeConfirm = true
+                    }
+                    .disabled(sync.isSyncing || !ble.isConnected)
+                }
                 Section {
                     Text("Перед підключенням повністю закрийте BlueWatch і Web IDE — годинник тримає лише одне з'єднання.")
                         .font(.footnote)
@@ -35,6 +57,20 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Налаштування")
+            .confirmationDialog(
+                "Ви впевнені, що хочете видалити всі існуючі дані?",
+                isPresented: $showWipeConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Так, стерти і ресинкнути", role: .destructive) {
+                    AppDatabase.shared.wipeAll()
+                    sync.resetCursor()
+                    sync.startSync()
+                }
+                Button("Скасувати", role: .cancel) {}
+            } message: {
+                Text("Історія зітреться з бази застосунку і завантажиться з годинника заново. Годинник зберігає лише останні ~45 днів.")
+            }
         }
     }
 }
