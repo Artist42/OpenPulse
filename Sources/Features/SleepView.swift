@@ -36,6 +36,7 @@ struct SleepView: View {
     @ObservedObject var db = AppDatabase.shared
     @State private var period: Period = .night
     @State private var nights: [SleepNight] = []
+    @State private var naps: [SleepNap] = []
     @State private var selectedIndex = 0
 
     var body: some View {
@@ -115,6 +116,16 @@ struct SleepView: View {
                 row("Легкий", "\(SleepFormat.duration(night.lightDuration)) · \(percent(night.lightDuration, of: night.asleepDuration))")
                 row("Пробуджень", night.awakeningsCount == 0 ? "немає" : "\(night.awakeningsCount) · \(SleepFormat.duration(night.awakeDuration))")
             }
+
+            let dayNaps = naps.filter { Calendar.current.isDate($0.start, inSameDayAs: night.wakeDate) }
+            if !dayNaps.isEmpty {
+                Section("Дрімота цього дня") {
+                    ForEach(dayNaps) { nap in
+                        row("\(SleepFormat.time(nap.start)) – \(SleepFormat.time(nap.end))", SleepFormat.duration(nap.duration))
+                    }
+                    row("Разом дрімоти", SleepFormat.duration(dayNaps.reduce(0) { $0 + $1.duration }))
+                }
+            }
         }
     }
 
@@ -169,7 +180,8 @@ struct SleepView: View {
     // MARK: - Спільне
 
     private func summarySection(for nights: [SleepNight], title: String) -> some View {
-        Section(title) {
+        let periodNaps = napsIn(nights)
+        return Section(title) {
             row("Ночей із даними", "\(nights.count)")
             row("Середня тривалість", averageDuration(nights).map(SleepFormat.duration) ?? "—")
             row("Найдовша ніч", nights.map(\.asleepDuration).max().map(SleepFormat.duration) ?? "—")
@@ -179,7 +191,13 @@ struct SleepView: View {
             if let wake = clockStats(nights.compactMap(\.wakeTime)) {
                 row("Прокидання (середнє)", "\(wake.avg) ± \(wake.spread) хв")
             }
+            row("Дрімот за період", periodNaps.isEmpty ? "немає" : "\(periodNaps.count) · \(SleepFormat.duration(periodNaps.reduce(0) { $0 + $1.duration }))")
         }
+    }
+
+    private func napsIn(_ nights: [SleepNight]) -> [SleepNap] {
+        guard let firstDay = nights.first?.wakeDate else { return [] }
+        return naps.filter { $0.start >= firstDay }
     }
 
     private func bars(for nights: [SleepNight]) -> [NightBar] {
@@ -224,7 +242,9 @@ struct SleepView: View {
     private func reload() {
         let from = Calendar.current.startOfDay(for: Date()).addingTimeInterval(-32 * 86400)
         let samples = db.samples(from: from, to: Date().addingTimeInterval(600))
-        nights = SleepIntervalBuilder.nights(from: samples)
+        let result = SleepIntervalBuilder.analyze(from: samples)
+        nights = result.nights
+        naps = result.naps
         selectedIndex = max(0, nights.count - 1)
     }
 }
